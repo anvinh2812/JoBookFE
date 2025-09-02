@@ -1,206 +1,411 @@
-import React, { useEffect, useState } from 'react';
-import { useParams, Link } from 'react-router-dom';
-import { usersAPI, followsAPI, cvsAPI, postsAPI } from '../services/api';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
+import { usersAPI, postsAPI, followsAPI, cvsAPI, applicationsAPI } from '../services/api';
 import FollowModal from '../components/FollowModal';
-import PostCard from '../components/PostCard';
-import CVViewerModal from '../components/CVViewerModal';
+import EditPostModal from '../components/EditPostModal';
 import ConfirmDialog from '../components/ConfirmDialog';
+import PostCard from '../components/PostCard';
+import ApplyModal from '../components/ApplyModal';
+import CVViewerModal from '../components/CVViewerModal';
 import notify from '../utils/notify';
 
 const Profile = () => {
-    const { id } = useParams();
-    const { user: authUser } = useAuth();
-    const effectiveId = id || authUser?.id;
-    const [user, setUser] = useState(null);
-    const [posts, setPosts] = useState([]);
-    const [loading, setLoading] = useState(true);
-    const [isFollowing, setIsFollowing] = useState(false);
-    const [followersCount, setFollowersCount] = useState(0);
-    const [followingCount, setFollowingCount] = useState(0);
-    const [showFollowers, setShowFollowers] = useState(false);
-    const [showFollowing, setShowFollowing] = useState(false);
-    const [cvUrl, setCvUrl] = useState('');
-    const [showCVModal, setShowCVModal] = useState(false);
-    const [confirmUnfollow, setConfirmUnfollow] = useState(false);
+  const { user, updateUser } = useAuth();
+  const [editing, setEditing] = useState(false);
+  const [formData, setFormData] = useState({
+    full_name: user?.full_name || '',
+    bio: user?.bio || '',
+  });
+  const [userPosts, setUserPosts] = useState([]);
+  const [followCounts, setFollowCounts] = useState({ followers: 0, following: 0 });
+  const [postFilter, setPostFilter] = useState('all');
+  const [loading, setLoading] = useState(false);
+  const [showFollowModal, setShowFollowModal] = useState(false);
+  const [followModalType, setFollowModalType] = useState('');
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editingPost, setEditingPost] = useState(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState(null);
+  const [selectedPost, setSelectedPost] = useState(null);
+  const [showApplyModal, setShowApplyModal] = useState(false);
+  const [showCVModal, setShowCVModal] = useState(false);
+  const [cvUrl, setCvUrl] = useState('');
 
-    const isOwnProfile = authUser && (!id || String(authUser.id) === String(effectiveId));
-
-    useEffect(() => {
-        loadUser();
-    }, [effectiveId]);
-
-    const loadUser = async () => {
-        try {
-            setLoading(true);
-            const [userRes, postsRes] = await Promise.all([
-                usersAPI.getUser(effectiveId),
-                postsAPI.getUserPosts(effectiveId)
-            ]);
-            const u = userRes.data;
-            setUser(u);
-            setPosts(postsRes.data.posts || []);
-            setIsFollowing(!!u.is_following);
-            setFollowersCount(u.followers_count || 0);
-            setFollowingCount(u.following_count || 0);
-        } catch (error) {
-            console.error('Error loading profile:', error);
-            notify.error('Không thể tải thông tin người dùng');
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    const toggleFollow = async () => {
-        if (!authUser) return;
-        try {
-            if (isFollowing) {
-                setConfirmUnfollow(true);
-            } else {
-                await followsAPI.follow(effectiveId);
-                setIsFollowing(true);
-                setFollowersCount((c) => c + 1);
-            }
-        } catch (error) {
-            console.error('Follow error:', error);
-            notify.error('Không thể theo dõi');
-        }
-    };
-
-    const confirmUnfollowAction = async () => {
-        try {
-            await followsAPI.unfollow(effectiveId);
-            setIsFollowing(false);
-            setFollowersCount((c) => Math.max(0, c - 1));
-        } catch (error) {
-            console.error('Unfollow error:', error);
-            notify.error('Không thể hủy theo dõi');
-        } finally {
-            setConfirmUnfollow(false);
-        }
-    };
-
-    const handleViewCV = async (cvId) => {
-        try {
-            const response = await cvsAPI.getCVFile(cvId);
-            const blob = new Blob([response.data], { type: 'application/pdf' });
-            const url = URL.createObjectURL(blob);
-            setCvUrl(url);
-            setShowCVModal(true);
-        } catch (error) {
-            console.error('Error viewing CV:', error);
-            notify.error('Không thể xem CV');
-        }
-    };
-
-    if (loading) {
-        return (
-            <div className="flex justify-center items-center h-64">
-                <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-primary-500"></div>
-            </div>
-        );
+  useEffect(() => {
+    if (user) {
+      fetchUserPosts();
+      fetchFollowCounts();
     }
+  }, [user, postFilter]);
 
-    if (!user) {
-        return (
-            <div className="max-w-3xl mx-auto p-6">
-                <p className="text-gray-600">Không tìm thấy người dùng</p>
-            </div>
-        );
+  const fetchUserPosts = async () => {
+    try {
+      const params = postFilter !== 'all' ? { type: postFilter } : {};
+      const response = await postsAPI.getUserPosts(user.id, params);
+      setUserPosts(response.data.posts);
+    } catch (error) {
+      console.error('Error fetching user posts:', error);
     }
+  };
 
-    return (
-        <div className="max-w-4xl mx-auto">
-            <div className="bg-white rounded-lg shadow p-6 mb-6">
-                <div className="flex items-center gap-4">
-                    <img
-                        src={user.avatar_url || 'https://i.pravatar.cc/150'}
-                        alt={user.name}
-                        className="w-20 h-20 rounded-full object-cover"
-                    />
-                    <div className="flex-1">
-                        <h1 className="text-2xl font-bold text-gray-900">{user.name}</h1>
-                        <p className="text-gray-600">{user.email}</p>
-                        <div className="flex gap-4 mt-2 text-sm text-gray-600">
-                            <button onClick={() => setShowFollowers(true)} className="hover:underline">
-                                <strong>{followersCount}</strong> người theo dõi
-                            </button>
-                            <button onClick={() => setShowFollowing(true)} className="hover:underline">
-                                Đang theo dõi <strong>{followingCount}</strong>
-                            </button>
-                        </div>
-                    </div>
+  const fetchFollowCounts = async () => {
+    try {
+      const response = await followsAPI.getFollowCounts(user.id);
+      setFollowCounts(response.data);
+    } catch (error) {
+      console.error('Error fetching follow counts:', error);
+    }
+  };
 
-                    {!isOwnProfile && (
-                        <button
-                            onClick={toggleFollow}
-                            className={`px-4 py-2 rounded-md text-sm font-medium ${isFollowing ? 'bg-gray-100 text-gray-700 hover:bg-gray-200' : 'bg-primary-600 text-white hover:bg-primary-700'}`}
-                        >
-                            {isFollowing ? 'Đang theo dõi' : 'Theo dõi'}
-                        </button>
-                    )}
-                    {isOwnProfile && (
-                        <Link
-                            to="/my-cvs"
-                            className="px-4 py-2 rounded-md text-sm font-medium bg-gray-100 text-gray-700 hover:bg-gray-200"
-                        >
-                            Quản lý CV
-                        </Link>
-                    )}
-                </div>
-            </div>
+  const handleChange = (e) => {
+    setFormData({
+      ...formData,
+      [e.target.name]: e.target.value,
+    });
+  };
 
-            <div className="space-y-6">
-                {posts.length === 0 ? (
-                    <div className="text-center py-12">
-                        <p className="text-gray-500 text-lg">Chưa có bài đăng nào</p>
-                    </div>
-                ) : (
-                    posts.map((post) => (
-                        <PostCard
-                            key={post.id}
-                            post={post}
-                            currentUser={authUser}
-                            onViewCV={handleViewCV}
-                        />
-                    ))
-                )}
-            </div>
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setLoading(true);
 
-            <FollowModal
-                open={showFollowers}
-                onClose={() => setShowFollowers(false)}
-                userId={effectiveId}
-                type="followers"
-            />
-            <FollowModal
-                open={showFollowing}
-                onClose={() => setShowFollowing(false)}
-                userId={effectiveId}
-                type="following"
-            />
+    try {
+      const response = await usersAPI.updateProfile(formData);
+      updateUser(response.data.user);
+      setEditing(false);
+    } catch (error) {
+      console.error('Error updating profile:', error);
+      notify.error('Lỗi khi cập nhật hồ sơ');
+    } finally {
+      setLoading(false);
+    }
+  };
 
-            {showCVModal && (
-                <CVViewerModal
-                    cvUrl={cvUrl}
-                    onClose={() => {
-                        setShowCVModal(false);
-                        setCvUrl('');
-                    }}
-                />
+  const handleAvatarUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const formData = new FormData();
+    formData.append('avatar', file);
+
+    try {
+      const response = await usersAPI.uploadAvatar(formData);
+      updateUser({ ...user, avatar_url: response.data.avatar_url });
+    } catch (error) {
+      console.error('Error uploading avatar:', error);
+      notify.error('Lỗi khi tải lên ảnh đại diện');
+    }
+  };
+
+  const formatDate = (dateString) => {
+    return new Date(dateString).toLocaleDateString('vi-VN', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+    });
+  };
+
+  const handleEditPost = (post) => {
+    setEditingPost(post);
+    setShowEditModal(true);
+  };
+
+  const handleSavePost = async (postId, postData) => {
+    try {
+      await postsAPI.updatePost(postId, postData);
+      fetchUserPosts(); // Refresh posts
+      notify.success('Cập nhật bài đăng thành công!');
+    } catch (error) {
+      console.error('Error updating post:', error);
+      throw error;
+    }
+  };
+
+  const handleDeletePost = async (postId) => {
+    setConfirmDeleteId(postId);
+  };
+
+  const confirmDelete = async () => {
+    if (!confirmDeleteId) return;
+    try {
+      await postsAPI.deletePost(confirmDeleteId);
+      fetchUserPosts();
+      notify.success('Xóa bài đăng thành công!');
+    } catch (error) {
+      console.error('Error deleting post:', error);
+      notify.error('Lỗi khi xóa bài đăng');
+    } finally {
+      setConfirmDeleteId(null);
+    }
+  };
+
+  // Apply/View CV handlers
+  const handleApply = (post) => {
+    setSelectedPost(post);
+    setShowApplyModal(true);
+  };
+
+  const handleViewCV = async (cvId) => {
+    try {
+      const response = await cvsAPI.getCVFile(cvId);
+      const blob = new Blob([response.data], { type: 'application/pdf' });
+      const url = URL.createObjectURL(blob);
+      setCvUrl(url);
+      setShowCVModal(true);
+    } catch (error) {
+      console.error('Error viewing CV:', error);
+      notify.error('Không thể xem CV');
+    }
+  };
+
+  const handleApplicationSubmit = async (applicationData) => {
+    try {
+      await applicationsAPI.apply(applicationData);
+      setShowApplyModal(false);
+      notify.success('Nộp CV thành công!');
+    } catch (error) {
+      console.error('Error applying:', error);
+      notify.error(error, 'Lỗi khi nộp CV');
+    }
+  };
+
+  return (
+    <div className="max-w-4xl mx-auto">
+      {/* Profile Header */}
+      <div className="bg-white rounded-lg shadow-md p-6 mb-6">
+        <div className="flex items-start space-x-6">
+          {/* Avatar */}
+          <div className="relative">
+            {user?.avatar_url ? (
+              <img
+                src={`${user.avatar_url}`}
+                alt={user.full_name}
+                className="h-24 w-24 rounded-full object-cover"
+              />
+            ) : (
+              <div className="h-24 w-24 rounded-full bg-gray-300 flex items-center justify-center">
+                <span className="text-2xl font-medium text-gray-700">
+                  {user?.full_name?.charAt(0).toUpperCase()}
+                </span>
+              </div>
             )}
+            <label className="absolute bottom-0 right-0 bg-primary-600 text-white p-1 rounded-full cursor-pointer hover:bg-primary-700">
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+              </svg>
+              <input
+                type="file"
+                accept="image/*"
+                onChange={handleAvatarUpload}
+                className="hidden"
+              />
+            </label>
+          </div>
 
-            <ConfirmDialog
-                open={confirmUnfollow}
-                title="Hủy theo dõi"
-                message={`Bạn có chắc muốn hủy theo dõi ${user.name}?`}
-                confirmText="Hủy theo dõi"
-                variant="danger"
-                onClose={() => setConfirmUnfollow(false)}
-                onConfirm={confirmUnfollowAction}
-            />
+          {/* Profile Info */}
+          <div className="flex-1">
+            {editing ? (
+              <form onSubmit={handleSubmit} className="space-y-4">
+                <div>
+                  <input
+                    type="text"
+                    name="full_name"
+                    value={formData.full_name}
+                    onChange={handleChange}
+                    className="text-2xl font-bold text-gray-900 border-b-2 border-gray-300 focus:border-primary-500 outline-none bg-transparent"
+                    required
+                  />
+                </div>
+                <div>
+                  <textarea
+                    name="bio"
+                    value={formData.bio}
+                    onChange={handleChange}
+                    rows={3}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary-500 focus:border-primary-500"
+                    placeholder="Giới thiệu về bạn..."
+                  />
+                </div>
+                <div className="flex space-x-3">
+                  <button
+                    type="submit"
+                    disabled={loading}
+                    className="bg-primary-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-primary-700 disabled:opacity-50"
+                  >
+                    {loading ? 'Đang lưu...' : 'Lưu'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setEditing(false)}
+                    className="bg-gray-300 text-gray-700 px-4 py-2 rounded-md text-sm font-medium hover:bg-gray-400"
+                  >
+                    Hủy
+                  </button>
+                </div>
+              </form>
+            ) : (
+              <>
+                <div className="flex items-center justify-between">
+                  <h1 className="text-2xl font-bold text-gray-900">{user?.full_name}</h1>
+                  <button
+                    onClick={() => setEditing(true)}
+                    className="bg-primary-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-primary-700"
+                  >
+                    Chỉnh sửa
+                  </button>
+                </div>
+                <div className="flex items-center space-x-4 mt-2">
+                  <span className="bg-gray-100 text-gray-800 px-3 py-1 rounded-full text-sm">
+                    {user?.account_type === 'candidate' ? 'Ứng viên' : 'Doanh nghiệp'}
+                  </span>
+                  <span className="text-gray-600">{user?.email}</span>
+                </div>
+                <p className="text-gray-700 mt-3">{user?.bio || 'Chưa có giới thiệu'}</p>
+
+                {/* Follow stats */}
+                <div className="flex space-x-6 mt-4">
+                  <button
+                    onClick={() => {
+                      setFollowModalType('followers');
+                      setShowFollowModal(true);
+                    }}
+                    className="text-center hover:bg-gray-50 p-2 rounded-md transition-colors"
+                  >
+                    <div className="text-xl font-bold text-gray-900">{followCounts.followers}</div>
+                    <div className="text-sm text-gray-600">Người theo dõi</div>
+                  </button>
+                  <button
+                    onClick={() => {
+                      setFollowModalType('following');
+                      setShowFollowModal(true);
+                    }}
+                    className="text-center hover:bg-gray-50 p-2 rounded-md transition-colors"
+                  >
+                    <div className="text-xl font-bold text-gray-900">{followCounts.following}</div>
+                    <div className="text-sm text-gray-600">Đang theo dõi</div>
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
         </div>
-    );
+      </div>
+
+      {/* Posts Section */}
+      <div className="bg-white rounded-lg shadow-md p-6">
+        <div className="flex items-center justify-between mb-6">
+          <h2 className="text-xl font-bold text-gray-900">Bài đăng của tôi</h2>
+
+          {/* Filter buttons */}
+          <div className="flex space-x-2">
+            <button
+              onClick={() => setPostFilter('all')}
+              className={`px-3 py-1 rounded-md text-sm font-medium ${postFilter === 'all'
+                ? 'bg-primary-600 text-white'
+                : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                }`}
+            >
+              Tất cả
+            </button>
+            {user?.account_type === 'candidate' && (
+              <button
+                onClick={() => setPostFilter('find_job')}
+                className={`px-3 py-1 rounded-md text-sm font-medium ${postFilter === 'find_job'
+                  ? 'bg-primary-600 text-white'
+                  : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                  }`}
+              >
+                Tìm việc
+              </button>
+            )}
+            {user?.account_type === 'company' && (
+              <button
+                onClick={() => setPostFilter('find_candidate')}
+                className={`px-3 py-1 rounded-md text-sm font-medium ${postFilter === 'find_candidate'
+                  ? 'bg-primary-600 text-white'
+                  : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                  }`}
+              >
+                Tuyển dụng
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Posts list */}
+        <div className="space-y-4">
+          {userPosts.length === 0 ? (
+            <div className="text-center py-8">
+              <p className="text-gray-500">Chưa có bài đăng nào</p>
+            </div>
+          ) : (
+            userPosts.map((post) => (
+              <PostCard
+                key={post.id}
+                post={post}
+                currentUser={user}
+                onApply={handleApply}
+                onViewCV={handleViewCV}
+                onEdit={handleEditPost}
+                onDelete={handleDeletePost}
+              />
+            ))
+          )}
+        </div>
+      </div>
+
+      {/* Follow Modal */}
+      {showFollowModal && (
+        <FollowModal
+          userId={user.id}
+          type={followModalType}
+          onClose={() => setShowFollowModal(false)}
+        />
+      )}
+
+      {/* Edit Post Modal */}
+      {showEditModal && editingPost && (
+        <EditPostModal
+          post={editingPost}
+          onClose={() => {
+            setShowEditModal(false);
+            setEditingPost(null);
+          }}
+          onSave={handleSavePost}
+        />
+      )}
+
+      {/* Apply Modal */}
+      {showApplyModal && (
+        <ApplyModal
+          post={selectedPost}
+          onClose={() => setShowApplyModal(false)}
+          onSubmit={handleApplicationSubmit}
+        />
+      )}
+
+      {/* CV Viewer Modal */}
+      {showCVModal && (
+        <CVViewerModal
+          cvUrl={cvUrl}
+          onClose={() => {
+            setShowCVModal(false);
+            setCvUrl('');
+          }}
+        />
+      )}
+
+      {/* Confirm Delete */}
+      <ConfirmDialog
+        open={!!confirmDeleteId}
+        title="Xóa bài đăng"
+        message="Bạn có chắc chắn muốn xóa bài đăng này? Hành động này không thể hoàn tác."
+        confirmText="Xóa"
+        variant="danger"
+        onClose={() => setConfirmDeleteId(null)}
+        onConfirm={confirmDelete}
+      />
+    </div>
+  );
 };
 
 export default Profile;

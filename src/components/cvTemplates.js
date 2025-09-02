@@ -5,7 +5,7 @@ const cvTemplates = [
     name: 'Classic One',
     preview: '/images/cv-thumbnails/classic-one.svg',
     style: 'classicOne',
-    description: 'Mẫu 1 cột có avatar và các mục như ảnh minh họa.'
+    description: 'Mẫu 1 cột có avatar và các mục như ảnh minh hoạ.'
   },
   {
     id: 2,

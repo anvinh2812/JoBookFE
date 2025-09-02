@@ -21,7 +21,7 @@ api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
-      toast.error('Phiên đăng nhập đã hết hạn, vui lòng đăng nhập lại');
+  toast.error('Phiên đăng nhập đã hết hạn, vui lòng đăng nhập lại');
       localStorage.removeItem('token');
       localStorage.removeItem('user');
       window.location.href = '/login';
@@ -75,10 +75,10 @@ export const followsAPI = {
   getFollowers: () => api.get('/follows/followers'),
   getFollowing: () => api.get('/follows/following'),
   getFollowStatus: (userId) => api.get(`/follows/status/${userId}`),
+  getFollowCounts: (userId) => api.get(`/follows/counts/${userId}`),
   // By specific userId (for viewing other profiles)
   getFollowersByUser: (userId) => api.get(`/follows/${userId}/followers`),
   getFollowingByUser: (userId) => api.get(`/follows/${userId}/following`),
-  getFollowCounts: (userId) => api.get(`/follows/counts/${userId}`),
 };
 
 // Users API

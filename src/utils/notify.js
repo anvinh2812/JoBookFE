@@ -1,21 +1,28 @@
-import toast from 'react-hot-toast';
-import errorMessagesVi from './errorMessages.vi';
+import { toast } from 'react-hot-toast';
+import ERROR_MESSAGES_VI from './errorMessages.vi';
 
-const resolveMessage = (error, fallback) => {
-  if (!error) return fallback || 'Có lỗi xảy ra';
-  // Axios error shape
-  const backendMessage = error?.response?.data?.message || error?.message;
-  if (backendMessage && errorMessagesVi[backendMessage]) {
-    return errorMessagesVi[backendMessage];
-  }
-  if (typeof backendMessage === 'string') return backendMessage;
-  return fallback || 'Có lỗi xảy ra';
+// Translate backend message to Vietnamese if known
+const toVi = (msg) => {
+  if (!msg) return null;
+  // exact match first
+  if (ERROR_MESSAGES_VI[msg]) return ERROR_MESSAGES_VI[msg];
+  return null;
 };
 
-const notify = {
-  success: (msg) => toast.success(msg),
-  error: (error, fallback) => toast.error(resolveMessage(error, fallback)),
-  info: (msg) => toast(msg),
+const extractMessage = (error) => {
+  // Axios error shape or plain string
+  const raw = error?.response?.data?.message || error?.message || error;
+  const vi = toVi(raw);
+  return vi || (typeof raw === 'string' ? raw : null) || 'Đã xảy ra lỗi, vui lòng thử lại sau.';
+};
+
+export const notify = {
+  success: (message, opts = {}) => toast.success(message, opts),
+  error: (error, fallback, opts = {}) => {
+    const msg = extractMessage(error) || fallback || 'Đã xảy ra lỗi, vui lòng thử lại sau.';
+    return toast.error(msg, opts);
+  },
+  info: (message, opts = {}) => toast(message, opts),
 };
 
 export default notify;
